@@ -34,7 +34,7 @@ MainWindow::MainWindow(QWidget *parent)
     main_vlayout->addWidget(file_progress_bar);
 
     processing_progress_bar = new QProgressBar;
-    processing_progress_bar->setFormat("%p");
+    processing_progress_bar->setFormat("%p%");
     processing_progress_bar->setVisible(false);
     main_vlayout->addWidget(processing_progress_bar);
 
@@ -60,6 +60,7 @@ void MainWindow::setupWorker()
     connect(m_worker, &Worker::fileSize, this, &MainWindow::setFileSize);
     connect(m_worker, &Worker::fileProcessed, this, &MainWindow::fileProcessed);
     connect(m_worker, &Worker::oneBlockProcessed, this, &MainWindow::oneBlockProcessed);
+    connect(m_worker, &Worker::completeProcessing, this, &MainWindow::completeProcessing);
 
     m_thread->start();
 }
@@ -91,14 +92,17 @@ void MainWindow::setupSavePathGroup()
     save_path_hlayout = new QHBoxLayout(save_group);
     save_path_lineedit = new QLineEdit("D://test_files");
     save_name_lineedit = new QLineEdit("test_file");
+    QLabel *separator = new QLabel("/");
+    save_name_lineedit->setPlaceholderText("Имя выходного файла");
     save_path_lineedit->setReadOnly(true);
     discover_save_directory = new QPushButton("Обзор...");
     connect(discover_save_directory,
             &QPushButton::clicked,
             this,
             &MainWindow::on_selectSaveDirectoryButton_clicked
-            );
+    );
     save_path_hlayout->addWidget(save_path_lineedit);
+    save_path_hlayout->addWidget(separator);
     save_path_hlayout->addWidget(save_name_lineedit);
     save_path_hlayout->addWidget(discover_save_directory);
     main_vlayout->addWidget(save_group);
@@ -271,6 +275,8 @@ void MainWindow::on_shutdownButton_clicked()
     m_isActive = false;
     m_isPaused = false;
     start->setText("Начать выполнение");
+
+    m_worker->shutdown();
 }
 
 void MainWindow::currentModeChanged(const QString &text)
@@ -326,6 +332,7 @@ void MainWindow::setFileSize(int size)
 void MainWindow::fileProcessed()
 {
     file_progress_bar->setValue(file_progress_bar->value() + 1);
+    processing_progress_bar->setValue(processing_progress_bar->maximum());
 }
 
 void MainWindow::oneBlockProcessed(int step)
@@ -333,4 +340,16 @@ void MainWindow::oneBlockProcessed(int step)
     processing_progress_bar->setValue(processing_progress_bar->value() + step);
 }
 
-MainWindow::~MainWindow() {}
+void MainWindow::completeProcessing()
+{
+    shutdown->setVisible(false);
+    status_label->setText("Выполнение завершено");
+    m_isActive = false;
+    m_isPaused = false;
+    start->setText("Начать выполнение");
+}
+
+MainWindow::~MainWindow() {
+    if (m_isActive)
+        m_worker->shutdown();
+}

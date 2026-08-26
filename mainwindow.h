@@ -83,6 +83,7 @@ private slots:
     void setFileSize(int size);
     void fileProcessed();
     void oneBlockProcessed(int step);
+    void completeProcessing();
 
 signals:
     void startWork(Settings s);

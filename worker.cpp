@@ -23,13 +23,54 @@ void Worker::resume()
 }
 
 
+void Worker::shutdown()
+{
+    shutdownRequested.store(true);
+    pauseCondition.wakeAll();
+}
+
+
 void Worker::waitIfPaused()
 {
     QMutexLocker locker(&pauseMutex);
 
-    while (pauseRequested)
+    while (pauseRequested && !shutdownRequested.load())
     {
         pauseCondition.wait(&pauseMutex);
+    }
+}
+
+QString Worker::getUniqueFileName(const QString &directory,
+                          const QString &fileName)
+{
+    QFileInfo info(directory, fileName);
+
+    if (!info.exists())
+        return info.filePath();
+
+    QString baseName = info.completeBaseName();
+    QString suffix = info.suffix();
+
+    int counter = 1;
+
+    while (true)
+    {
+        QString newName;
+
+        if (suffix.isEmpty())
+            newName = QString("%1%2").arg(baseName).arg(counter);
+        else
+            newName = QString("%1%2.%3")
+                          .arg(baseName)
+                          .arg(counter)
+                          .arg(suffix);
+
+        QString newPath = QDir(directory).filePath(newName);
+
+        if (!QFile::exists(newPath))
+            return newPath;
+
+        counter++;
     }
 }
 
@@ -47,6 +88,7 @@ void Worker::startProcessing(const Settings &s)
     qDebug() << s.XOR_key;
     qDebug() << "--------------";
 
+    shutdownRequested.store(false);
 
     // подсчёт кол-ва файлов для прогресс бара
     QDirIterator it1 (
@@ -92,16 +134,26 @@ void Worker::startProcessing(const Settings &s)
         qDebug() << inputPath;
         qDebug() << outputFilePath;
 
-        processFile(inputPath, outputFilePath, key);
+        if (s.duplicateAction == onDuplicateInputFileAction::Counter)
+        {
+            outputFilePath = getUniqueFileName(s.savePath, s.saveName + ".bin");
+        }
+
+        bool processed_status = processFile(inputPath, outputFilePath, key);
+
+        if (!processed_status)
+            return;
 
         emit fileProcessed();
     }
 
     qDebug() << "Файлы обработаны";
+
+    emit completeProcessing();
 }
 
 
-void Worker::processFile(const QString &inputPath,
+bool Worker::processFile(const QString &inputPath,
                  const QString &outputPath,
                  const QByteArray &key)
 {
@@ -113,13 +165,13 @@ void Worker::processFile(const QString &inputPath,
     if (!input.open(QIODevice::ReadOnly))
     {
         qDebug() << input.errorString();
-        return;
+        return false;
     }
 
     if (!output.open(QIODevice::WriteOnly))
     {
         qDebug() << output.errorString();
-        return;
+        return false;
     }
 
     constexpr qsizetype blockSize = 4096; // про qsizetype подробнее и constexpr
@@ -127,6 +179,9 @@ void Worker::processFile(const QString &inputPath,
     while (!input.atEnd())
     {
         waitIfPaused();
+
+        if (shutdownRequested.load())
+            return false;
 
         QByteArray block = input.read(blockSize);
 
@@ -141,4 +196,5 @@ void Worker::processFile(const QString &inputPath,
     }
 
     qDebug() << "Файл обработан";
+    return true;
 }

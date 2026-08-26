@@ -16,7 +16,7 @@ class Worker : public QObject
 public:
     explicit Worker(QObject *parent = nullptr); // вспомнить что такое explicit
 
-    void processFile(const QString &inputPath,
+    bool processFile(const QString &inputPath,
         const QString &outputPath,
         const QByteArray &key);
 
@@ -24,10 +24,17 @@ public:
     void resume();
     void waitIfPaused();
 
+    void shutdown();
+
 private:
+    QString getUniqueFileName(const QString &directory,
+                              const QString &fileName);
+
     QMutex pauseMutex;
     QWaitCondition pauseCondition;
     bool pauseRequested;
+
+    std::atomic_bool shutdownRequested{false};
 
 public slots:
     void startProcessing(const Settings &s);
@@ -37,6 +44,7 @@ signals:
     void fileSize(int size);
     void fileProcessed();
     void oneBlockProcessed(int step);
+    void completeProcessing();
 };
 
 #endif // WORKER_H
