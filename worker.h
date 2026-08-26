@@ -18,7 +18,8 @@ public:
 
     bool processFile(const QString &inputPath,
         const QString &outputPath,
-        const QByteArray &key);
+        const QByteArray &key,
+        const bool &deleteInputFile);
 
     void pause();
     void resume();

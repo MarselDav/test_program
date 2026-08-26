@@ -139,7 +139,7 @@ void Worker::startProcessing(const Settings &s)
             outputFilePath = getUniqueFileName(s.savePath, s.saveName + ".bin");
         }
 
-        bool processed_status = processFile(inputPath, outputFilePath, key);
+        bool processed_status = processFile(inputPath, outputFilePath, key, s.deleteInputFile);
 
         if (!processed_status)
             return;
@@ -154,8 +154,9 @@ void Worker::startProcessing(const Settings &s)
 
 
 bool Worker::processFile(const QString &inputPath,
-                 const QString &outputPath,
-                 const QByteArray &key)
+                const QString &outputPath,
+                const QByteArray &key,
+                const bool &deleteInputFile)
 {
     qDebug() << "Обработка файла" << inputPath;
 
@@ -193,6 +194,20 @@ bool Worker::processFile(const QString &inputPath,
         output.write(block);
 
         emit oneBlockProcessed(blockSize);
+    }
+
+    input.close();
+    output.close();
+
+    if (deleteInputFile)
+    {
+        if (!QFile::remove(inputPath))
+        {
+            qDebug() << "Не удалось удалить исходный файл:"
+                     << inputPath;
+
+            return false;
+        }
     }
 
     qDebug() << "Файл обработан";
