@@ -18,13 +18,25 @@ enum Mode
 class Settings
 {
 public:
-    Settings(QString m, bool dIFile,
-             QString sP, QString sN, QString inP,
-             int dA, int wM,
-             int s, QString key) : mask(m),
+    Settings(QString m = "",
+             bool dIFile = false,
+             QString sP = "",
+             QString sN = "",
+             QString inP = "",
+             int dA = Counter,
+             int wM = Single,
+             int s = 0,
+             QString key = "")
+        : mask(m),
         deleteInputFile(dIFile),
-        savePath(sP), saveName(sN), inputPath(inP), duplicateAction(dA),
-        workMode(wM), seconds(s), XOR_key(key) {}
+        savePath(sP),
+        saveName(sN),
+        inputPath(inP),
+        duplicateAction(dA),
+        workMode(wM),
+        seconds(s),
+        XOR_key(key)
+    {}
 
     QString mask;
     bool deleteInputFile;

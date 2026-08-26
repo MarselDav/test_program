@@ -45,7 +45,7 @@ signals:
     void fileSize(int size);
     void fileProcessed();
     void oneBlockProcessed(int step);
-    void completeProcessing();
+    void completeProcessing(const Settings& s);
 };
 
 #endif // WORKER_H

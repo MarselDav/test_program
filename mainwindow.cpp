@@ -3,6 +3,17 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    m_settings = Settings();
+    m_processingTimer = new QTimer(this);
+    m_processingTimer->setSingleShot(true);
+
+    connect(
+        m_processingTimer,
+        &QTimer::timeout,
+        this,
+        &MainWindow::startProcessing
+    );
+
     QWidget *central = new QWidget;
     main_vlayout = new QVBoxLayout;
 
@@ -206,37 +217,38 @@ Settings MainWindow::collectSettings()
     return s;
 }
 
-void MainWindow::on_startButton_clicked()
+void MainWindow::startProcessing()
 {
+    start->setEnabled(true);
     if (!m_isActive)
     {
-        Settings s = collectSettings();
+        m_settings = collectSettings();
 
-        if (s.mask.isEmpty())
+        if (m_settings.mask.isEmpty())
         {
             qDebug() << "Маска входных файлов пустая";
             return;
         }
 
-        if (s.savePath.isEmpty())
+        if (m_settings.savePath.isEmpty())
         {
             qDebug() << "Путь для сохранения файлов пустой";
             return;
         }
 
-        if (s.saveName.isEmpty())
+        if (m_settings.saveName.isEmpty())
         {
             qDebug() << "Имя выходного файла пустое";
             return;
         }
 
-        if (s.inputPath.isEmpty())
+        if (m_settings.inputPath.isEmpty())
         {
             qDebug() << "Путь с входными файлами пустой";
             return;
         }
 
-        if (s.XOR_key.length() < 16)
+        if (m_settings.XOR_key.length() < 16)
         {
             qDebug() << "Длина ключа меньше 16 символов";
             return;
@@ -248,7 +260,7 @@ void MainWindow::on_startButton_clicked()
         shutdown->setVisible(true);
         status_label->setVisible(true);
 
-        emit startWork(s);
+        emit startWork(m_settings);
     }
 
     if (m_isPaused)
@@ -264,6 +276,11 @@ void MainWindow::on_startButton_clicked()
         m_worker->resume();
     }
     m_isPaused = !m_isPaused;
+}
+
+void MainWindow::on_startButton_clicked()
+{
+    startProcessing();
 }
 
 void MainWindow::on_shutdownButton_clicked()
@@ -314,7 +331,6 @@ void MainWindow::on_selectInputDirectoryButton_clicked()
     }
 }
 
-
 void MainWindow::setFilesCount(int cnt)
 {
     file_progress_bar->setRange(0, cnt);
@@ -342,11 +358,24 @@ void MainWindow::oneBlockProcessed(int step)
 
 void MainWindow::completeProcessing()
 {
-    shutdown->setVisible(false);
-    status_label->setText("Выполнение завершено");
     m_isActive = false;
     m_isPaused = false;
-    start->setText("Начать выполнение");
+
+    if (m_settings.workMode == Mode::Timer)
+    {
+        int seconds = m_settings.seconds;
+        qDebug() << "Следующий запуск через" << seconds << "сек.";
+        status_label->setText("Следующий запуск через " + QString::number(seconds) + " сек.");
+
+        start->setEnabled(false);
+        m_processingTimer->start(seconds * 1000);
+    }
+    else
+    {
+        status_label->setText("Выполнение завершено");
+        start->setText("Начать выполнение");
+        shutdown->setVisible(false);
+    }
 }
 
 MainWindow::~MainWindow() {

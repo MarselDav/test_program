@@ -15,6 +15,7 @@
 #include <QProgressBar>
 #include <QRegularExpressionValidator>
 #include <QThread>
+#include <QTimer>
 #include "settings.h"
 #include "worker.h"
 
@@ -72,11 +73,15 @@ private:
     bool m_isActive;
     bool m_isPaused;
 
+    Settings m_settings;
+    QTimer *m_processingTimer;
+
 private slots:
     void currentModeChanged(const QString &text);
     void on_selectSaveDirectoryButton_clicked();
     void on_selectInputDirectoryButton_clicked();
     void on_startButton_clicked();
+    void startProcessing();
     void on_shutdownButton_clicked();
 
     void setFilesCount(int cnt);

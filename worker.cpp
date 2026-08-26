@@ -149,7 +149,7 @@ void Worker::startProcessing(const Settings &s)
 
     qDebug() << "Файлы обработаны";
 
-    emit completeProcessing();
+    emit completeProcessing(s);
 }
 
 
