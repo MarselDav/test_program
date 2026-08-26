@@ -29,15 +29,15 @@ MainWindow::MainWindow(QWidget *parent)
     setupModeGroup();
     setupHexValueGroup();
 
-    start = new QPushButton("Начать выполнение");
-    connect(start, &QPushButton::clicked, this, &MainWindow::on_startButton_clicked);
-    main_vlayout->addWidget(start);
+    startButton = new QPushButton("Начать выполнение");
+    connect(startButton, &QPushButton::clicked, this, &MainWindow::on_startButton_clicked);
+    main_vlayout->addWidget(startButton);
 
-    shutdown = new QPushButton("Завершить");
-    connect(shutdown, &QPushButton::clicked, this, &MainWindow::on_shutdownButton_clicked);
-    shutdown->setStyleSheet("background-color: rgb(245, 85, 73)");
-    shutdown->setVisible(false);
-    main_vlayout->addWidget(shutdown);
+    cancelButton = new QPushButton("Завершить");
+    connect(cancelButton, &QPushButton::clicked, this, &MainWindow::on_cancelButton_clicked);
+    cancelButton->setStyleSheet("background-color: rgb(245, 85, 73)");
+    cancelButton->setVisible(false);
+    main_vlayout->addWidget(cancelButton);
 
     file_progress_bar = new QProgressBar;
     file_progress_bar->setFormat("%v/%m");
@@ -45,6 +45,7 @@ MainWindow::MainWindow(QWidget *parent)
     main_vlayout->addWidget(file_progress_bar);
 
     processing_progress_bar = new QProgressBar;
+    processing_progress_bar->setRange(0, 100);
     processing_progress_bar->setFormat("%p%");
     processing_progress_bar->setVisible(false);
     main_vlayout->addWidget(processing_progress_bar);
@@ -68,9 +69,8 @@ void MainWindow::setupWorker()
     connect(this, &MainWindow::startWork, m_worker, &Worker::startProcessing);
 
     connect(m_worker, &Worker::filesCount, this, &MainWindow::setFilesCount);
-    connect(m_worker, &Worker::fileSize, this, &MainWindow::setFileSize);
     connect(m_worker, &Worker::fileProcessed, this, &MainWindow::fileProcessed);
-    connect(m_worker, &Worker::oneBlockProcessed, this, &MainWindow::oneBlockProcessed);
+    connect(m_worker, &Worker::progress, this, &MainWindow::progress);
     connect(m_worker, &Worker::completeProcessing, this, &MainWindow::completeProcessing);
 
     m_thread->start();
@@ -185,17 +185,17 @@ void MainWindow::setupHexValueGroup()
 
 Settings MainWindow::collectSettings()
 {
-    int duplicateNameAction = 0;
+    DuplicateAction duplicateNameAction;
     if (action_on_name_duplication->currentText() == "Счётчик")
     {
-        duplicateNameAction = onDuplicateInputFileAction::Counter;
+        duplicateNameAction = DuplicateAction::Counter;
     }
     else
     {
-        duplicateNameAction = onDuplicateInputFileAction::Rewrite;
+        duplicateNameAction = DuplicateAction::Rewrite;
     }
 
-    int work_mode = 0;
+    Mode work_mode;
     if (mode->currentText() == "Разовый запуск")
     {
         work_mode = Mode::Single;
@@ -219,7 +219,7 @@ Settings MainWindow::collectSettings()
 
 void MainWindow::startProcessing()
 {
-    start->setEnabled(true);
+    startButton->setEnabled(true);
     if (!m_isActive)
     {
         m_settings = collectSettings();
@@ -248,30 +248,31 @@ void MainWindow::startProcessing()
             return;
         }
 
-        if (m_settings.XOR_key.length() < 16)
+        if (m_settings.XOR_key.length() != 16)
         {
-            qDebug() << "Длина ключа меньше 16 символов";
+            qDebug() << "Длина ключа не равна 16 символов";
             return;
         }
 
         m_isActive = true;
 
         status_label->setVisible(true);
-        shutdown->setVisible(true);
+        cancelButton->setVisible(true);
         status_label->setVisible(true);
+        processing_progress_bar->setVisible(true);
 
         emit startWork(m_settings);
     }
 
     if (m_isPaused)
     {
-        start->setText("Возобновить");
+        startButton->setText("Возобновить");
         status_label->setText("Выполнение на паузе...");
         m_worker->pause();
     }
     else
     {
-        start->setText("Приостановить");
+        startButton->setText("Приостановить");
         status_label->setText("Идёт выполнение...");
         m_worker->resume();
     }
@@ -283,17 +284,18 @@ void MainWindow::on_startButton_clicked()
     startProcessing();
 }
 
-void MainWindow::on_shutdownButton_clicked()
+void MainWindow::on_cancelButton_clicked()
 {
-    shutdown->setVisible(false);
+    cancelButton->setVisible(false);
     status_label->setVisible(false);
     processing_progress_bar->setVisible(false);
     file_progress_bar->setVisible(false);
     m_isActive = false;
     m_isPaused = false;
-    start->setText("Начать выполнение");
+    startButton->setText("Начать выполнение");
 
-    m_worker->shutdown();
+    m_worker->cancel();
+    m_processingTimer->stop();
 }
 
 void MainWindow::currentModeChanged(const QString &text)
@@ -331,29 +333,26 @@ void MainWindow::on_selectInputDirectoryButton_clicked()
     }
 }
 
-void MainWindow::setFilesCount(int cnt)
+void MainWindow::setFilesCount(const int& cnt)
 {
     file_progress_bar->setRange(0, cnt);
     file_progress_bar->setValue(0);
     file_progress_bar->setVisible(true);
 }
 
-void MainWindow::setFileSize(int size)
-{
-    processing_progress_bar->setRange(0, size);
-    processing_progress_bar->setValue(0);
-    processing_progress_bar->setVisible(true);
-}
-
 void MainWindow::fileProcessed()
 {
     file_progress_bar->setValue(file_progress_bar->value() + 1);
-    processing_progress_bar->setValue(processing_progress_bar->maximum());
+    // processing_progress_bar->setValue(processing_progress_bar->maximum());
 }
 
-void MainWindow::oneBlockProcessed(int step)
+void MainWindow::progress(const quint64& pos, const quint64& size)
 {
-    processing_progress_bar->setValue(processing_progress_bar->value() + step);
+    int percent =
+        static_cast<int>(
+            (pos * 100) / size
+    );
+    processing_progress_bar->setValue(percent);
 }
 
 void MainWindow::completeProcessing()
@@ -367,18 +366,22 @@ void MainWindow::completeProcessing()
         qDebug() << "Следующий запуск через" << seconds << "сек.";
         status_label->setText("Следующий запуск через " + QString::number(seconds) + " сек.");
 
-        start->setEnabled(false);
+        startButton->setEnabled(false);
         m_processingTimer->start(seconds * 1000);
     }
     else
     {
         status_label->setText("Выполнение завершено");
-        start->setText("Начать выполнение");
-        shutdown->setVisible(false);
+        startButton->setText("Начать выполнение");
+        cancelButton->setVisible(false);
     }
 }
 
 MainWindow::~MainWindow() {
-    if (m_isActive)
-        m_worker->shutdown();
+    m_processingTimer->stop();
+    m_worker->cancel();
+    m_thread->quit();
+    m_thread->wait();
+
+    delete m_worker;
 }

@@ -23,9 +23,9 @@ void Worker::resume()
 }
 
 
-void Worker::shutdown()
+void Worker::cancel()
 {
-    shutdownRequested.store(true);
+    cancelRequested.store(true);
     pauseCondition.wakeAll();
 }
 
@@ -34,7 +34,7 @@ void Worker::waitIfPaused()
 {
     QMutexLocker locker(&pauseMutex);
 
-    while (pauseRequested && !shutdownRequested.load())
+    while (pauseRequested && !cancelRequested.load())
     {
         pauseCondition.wait(&pauseMutex);
     }
@@ -76,35 +76,21 @@ QString Worker::getUniqueFileName(const QString &directory,
 
 void Worker::startProcessing(const Settings &s)
 {
-    qDebug() << "--------------";
-    qDebug() << s.mask;
-    qDebug() << s.deleteInputFile;
-    qDebug() << s.savePath;
-    qDebug() << s.saveName;
-    qDebug() << s.inputPath;
-    qDebug() << s.duplicateAction;
-    qDebug() << s.workMode;
-    qDebug() << s.seconds;
-    qDebug() << s.XOR_key;
-    qDebug() << "--------------";
-
-    shutdownRequested.store(false);
+    cancelRequested.store(false);
 
     // подсчёт кол-ва файлов для прогресс бара
-    QDirIterator it1 (
+    QDirIterator fileCountIterator (
         s.inputPath,
         QStringList() << s.mask,
         QDir::Files
     ); // QDirIterator::Subdirectories для рекурсии
 
     int cnt = 0;
-    while (it1.hasNext())
+    while (fileCountIterator.hasNext())
     {
-        it1.next();
+        fileCountIterator.next();
         cnt++;
     }
-
-    qDebug() << "Кол-во файлов: " << cnt;
 
     emit filesCount(cnt);
 
@@ -114,32 +100,32 @@ void Worker::startProcessing(const Settings &s)
         s.XOR_key.toLatin1()
     );
 
-    qDebug() << key;
+    if (key.size() != 8)
+    {
+        qDebug() << "Некорректный XOR-ключ";
+        return;
+    }
 
-    QDirIterator it (
+    QDirIterator fileIterator (
         s.inputPath,
         QStringList() << s.mask,
         QDir::Files
     ); // QDirIterator::Subdirectories для рекурсии
 
-    while (it.hasNext())
+    while (fileIterator.hasNext())
     {
-        QString inputPath = it.next();
+        QString inputPath = fileIterator.next();
 
         QFileInfo fileInfo(inputPath);
         qint64 size = fileInfo.size();
 
-        emit fileSize(size);
-
-        qDebug() << inputPath;
-        qDebug() << outputFilePath;
-
-        if (s.duplicateAction == onDuplicateInputFileAction::Counter)
+        if (s.duplicateAction == DuplicateAction::Counter)
         {
             outputFilePath = getUniqueFileName(s.savePath, s.saveName + ".bin");
         }
 
-        bool processed_status = processFile(inputPath, outputFilePath, key, s.deleteInputFile);
+        bool processed_status = processFile(inputPath, outputFilePath,
+                                            key, s.deleteInputFile, size);
 
         if (!processed_status)
             return;
@@ -147,7 +133,7 @@ void Worker::startProcessing(const Settings &s)
         emit fileProcessed();
     }
 
-    qDebug() << "Файлы обработаны";
+    qDebug() << "Все файлы обработаны";
 
     emit completeProcessing(s);
 }
@@ -156,7 +142,8 @@ void Worker::startProcessing(const Settings &s)
 bool Worker::processFile(const QString &inputPath,
                 const QString &outputPath,
                 const QByteArray &key,
-                const bool &deleteInputFile)
+                bool deleteInputFile,
+                const quint64 &file_size)
 {
     qDebug() << "Обработка файла" << inputPath;
 
@@ -175,25 +162,42 @@ bool Worker::processFile(const QString &inputPath,
         return false;
     }
 
-    constexpr qsizetype blockSize = 4096; // про qsizetype подробнее и constexpr
+    constexpr qsizetype blockSize = 4 * 1024 * 1024; // про qsizetype подробнее и constexpr
 
-    while (!input.atEnd())
+    while (true)
     {
+        QByteArray block = input.read(blockSize);
+
+        if (block.isEmpty())
+        {
+            if (input.atEnd())
+                break;
+
+            qDebug() << "Ошибка чтения:"
+                     << input.errorString();;
+            return false;
+        }
+
         waitIfPaused();
 
-        if (shutdownRequested.load())
+        if (cancelRequested.load())
             return false;
-
-        QByteArray block = input.read(blockSize);
 
         for (qsizetype i = 0; i < block.size(); ++i)
         {
             block[i] ^= key[i % key.size()];
         }
 
-        output.write(block);
+        quint64 written = output.write(block);
+        if (written != block.size())
+        {
+            qDebug() << "Ошибка записи:"
+                     << output.errorString();
 
-        emit oneBlockProcessed(blockSize);
+            return false;
+        }
+
+        emit progress(input.pos(), file_size);
     }
 
     input.close();
@@ -210,6 +214,6 @@ bool Worker::processFile(const QString &inputPath,
         }
     }
 
-    qDebug() << "Файл обработан";
+    qDebug() << "Файл " << outputPath <<  " обработан";
     return true;
 }

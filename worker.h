@@ -19,13 +19,14 @@ public:
     bool processFile(const QString &inputPath,
         const QString &outputPath,
         const QByteArray &key,
-        const bool &deleteInputFile);
+        bool deleteInputFile,
+        const quint64 &file_size);
 
     void pause();
     void resume();
     void waitIfPaused();
 
-    void shutdown();
+    void cancel();
 
 private:
     QString getUniqueFileName(const QString &directory,
@@ -35,16 +36,15 @@ private:
     QWaitCondition pauseCondition;
     bool pauseRequested;
 
-    std::atomic_bool shutdownRequested{false};
+    std::atomic_bool cancelRequested{false};
 
 public slots:
     void startProcessing(const Settings &s);
 
 signals:
     void filesCount(int cnt);
-    void fileSize(int size);
     void fileProcessed();
-    void oneBlockProcessed(int step);
+    void progress(const quint64& pos, const quint64& size);
     void completeProcessing(const Settings& s);
 };
 

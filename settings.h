@@ -3,13 +3,13 @@
 
 #include <QString>
 
-enum onDuplicateInputFileAction
+enum class DuplicateAction
 {
     Counter,
     Rewrite
 };
 
-enum Mode
+enum class Mode
 {
     Single,
     Timer
@@ -23,8 +23,8 @@ public:
              QString sP = "",
              QString sN = "",
              QString inP = "",
-             int dA = Counter,
-             int wM = Single,
+             DuplicateAction dA = DuplicateAction::Counter,
+             Mode wM = Mode::Single,
              int s = 0,
              QString key = "")
         : mask(m),
@@ -43,8 +43,8 @@ public:
     QString savePath;
     QString saveName;
     QString inputPath;
-    int duplicateAction;
-    int workMode;
+    DuplicateAction duplicateAction;
+    Mode workMode;
     int seconds;
     QString XOR_key;
 };

@@ -63,8 +63,8 @@ private:
 
     QLineEdit *xor_key;
 
-    QPushButton* start;
-    QPushButton* shutdown;
+    QPushButton* startButton;
+    QPushButton* cancelButton;
 
     QProgressBar* file_progress_bar;
     QProgressBar* processing_progress_bar;
@@ -82,12 +82,11 @@ private slots:
     void on_selectInputDirectoryButton_clicked();
     void on_startButton_clicked();
     void startProcessing();
-    void on_shutdownButton_clicked();
+    void on_cancelButton_clicked();
 
-    void setFilesCount(int cnt);
-    void setFileSize(int size);
+    void setFilesCount(const int& cnt);
     void fileProcessed();
-    void oneBlockProcessed(int step);
+    void progress(const quint64& pos, const quint64& size);
     void completeProcessing();
 
 signals:
